@@ -6,7 +6,7 @@ export default async function handle(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  if (req.method !== "POST") {
+  if (req.method !== "GET") {
     return res.status(405).end();
   }
 
@@ -33,7 +33,7 @@ export default async function handle(
   const isPastDate = referenceDate.endOf("day").isBefore(new Date());
 
   if (isPastDate) {
-    return res.json({ availability: [] });
+    return res.json({ possibleTimes: [], availableTimes: [] });
   }
 
   const userAvailability = await prisma.userTimeInterval.findFirst({
@@ -44,7 +44,7 @@ export default async function handle(
   });
 
   if (!userAvailability) {
-    return res.json({ availability: [] });
+    return res.json({ possibleTimes: [], availableTimes: [] });
   }
 
   const { time_end_in_minutes, time_start_in_minutes } = userAvailability;
@@ -58,5 +58,26 @@ export default async function handle(
     }
   );
 
-  return res.json({ possibleTimes });
+  // gte = greater than or equal = maior que ou igual
+
+  const blockedTImes = await prisma.scheduling.findMany({
+    select: {
+      date: true,
+    },
+    where: {
+      user_id: user.id,
+      date: {
+        gte: referenceDate.set("hour", startHour).toDate(),
+        lte: referenceDate.set("hour", endHour).toDate(),
+      },
+    },
+  });
+
+  const availableTimes = possibleTimes.filter((time) => {
+    return !blockedTImes.some(
+      (blockedtime) => blockedtime.date.getHours() === time
+    );
+  });
+
+  return res.json({ possibleTimes, availableTimes });
 }
